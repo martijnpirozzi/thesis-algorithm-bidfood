@@ -7,11 +7,12 @@ import time
 
 #True for saving plot, False otherwise
 save_fig = False
-#5, 7, 10, 12, 14 customers excels exist
+
+#5, 7, 10, 12, 14 customers db exist
 cust_excel = 5
 
 '''read the customer data from the excel file'''
-#data_path = (r'C:\Users\mmtde\OneDrive\Programming\Thesis BIDFOOD\Final\VRP%s' % (cust_excel) + '.xlsx')
+data_path = (r'C:\Users\VRP%s' % (cust_excel) + '.xlsx')
 data_path = (r'C:VRP%s' % (cust_excel) + '.xlsx')
 df = pd.read_excel(data_path, engine="openpyxl")
 n = df.shape[0] - 1  # number of customers
@@ -29,15 +30,12 @@ Locations = [0] + LocationsCustomers #+ [n+1]# L --> set locations with depot
 Products = [1, 2] # Set of product categories
 
 Vehicles = ["A", "B", "C", "D", "E", "F", "G", "H"]
-#Vehicles = ["A", "B", "C", "D"]
 Wmax = 7490 # MAX vehicle load # or. val. =7490
 Wempt = 3240 #kg empty weight
 MaxLoad = 4250 #capacity weight is 4250KG
 Qv_fresh = 9 # capcity rollcontainers = 12
 Qv_frozen = 3
 #Qv = Qv_fresh + Qv_frozen
-
-
 Bv = 144 # battery capacity in kWh
 
 alpha = 0.0981
@@ -54,7 +52,6 @@ DemandTotal = df['dt'] # demand of product frozen customer i
 DemandWeight = df["dw"] # demand weight customer i
 et = df["et"] # earliest time start customer i
 lt = df["lt"] # latest time start customer i
-# et - lt = time window
 ut = df["ut"] # service time at customer i
 
 
@@ -69,7 +66,6 @@ E = [(i, p) for i in LocationsCustomers for p in Products]  # create empty array
 
 
 x = mdl.binary_var_dict(A, name = 'x') # xjiv --> if customer i is served by vehicle (v)
-#y = mdl.binary_var_dict(A, name = 'y') # yijv --> if customer i is visited right before location j
 z = mdl.continuous_var_dict(B, name = 'z', ub=Bv) # ziv --> remaining battery charge of vehicle v on arrival at j from i
 b = mdl.continuous_var_dict(B, name = 'b') # biv -->arrival time at customer i
 #Q = mdl.integer_var_dict(D, name = 'Q') # Qpv --> capacity units of product type p of vehicle (v)
@@ -116,7 +112,7 @@ for v in Vehicles:
     mdl.add(Qfrozen[i, v] >= (DemandFrozen[i]) for i in LocationsCustomers)
 
 '''WEIGHT TRACKING OF VEHICLE'''
-#constraint tracking vehicle load
+#constraint 7 tracking vehicle load
 for i in Locations:
     for v in Vehicles:
         mdl.add(W[0, v] == 0 for i in Locations)
@@ -124,7 +120,7 @@ for i in Locations:
         mdl.add(W[i, v] >= DemandWeight[i] for i in Locations)
 
 '''ENERGY CONSTRAINTS'''
-#constraint 12 energy use
+#constraint 8 energy use
 for v in Vehicles:
     mdl.add((J[i, j, v] == ((((alpha * (Wempt + W[j, v]) * a[i, j]) + (beta * (4.1666667 ** 2) * a[i, j])) / EngineEff) / 500)) for i in Locations for j in Locations for v in Vehicles)
 
@@ -137,7 +133,7 @@ for i in Locations:
         mdl.add_indicator_constraints(mdl.indicator_constraint(x[i, j, v], CumEn[i,v] + J[i,j,v] == CumEn[j,v]) for i in Locations for j in Locations for v in Vehicles if j != 0)
         mdl.add_indicator_constraints(mdl.indicator_constraint(x[i, j, v], Bv - CumEn[i,v] >= CumEn[j,v]) for i in Locations for j in Locations for v in Vehicles if j != 0)
 
-        #remaining battery function
+        #Remaining battery function
         mdl.add_indicator_constraints(mdl.indicator_constraint(x[i, j, v], Bv - CumEn[i,v] == z[i, v]) for i in Locations for j in Locations for v in Vehicles)
 
 
@@ -153,8 +149,8 @@ for v in Vehicles:
     mdl.add_constraints(b[i, v] <= lt[i] for i in LocationsCustomers for v in Vehicles)
     mdl.add_indicator_constraints(mdl.indicator_constraint(x[i, j, v], (b[i, v] + (ut[i]/60) + t[i, j]) <= b[j, v]) for i in Locations for j in Locations for v in Vehicles if j != 0 if i!=n+1)
 
-
-#mdl.parameters.timelimit = 15 # Add running time limit
+'''TIME LIMIT (E.G. SAVING VM COSTS)'''
+mdl.parameters.timelimit = 15 # Add running time limit
 
 '''OBJECTIVE FUNCTION'''
 obj_function = (mdl.sum(J[i, j, v] * x[i, j, v] for v in Vehicles for i in Locations for j in Locations if i != j))
